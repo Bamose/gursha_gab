@@ -1,0 +1,207 @@
+import { Image, Pressable } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import "../app/global";
+import { gabtypes } from "../types/types";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { Link } from "expo-router";
+import getLocation from "./userloctation";
+import haversine from "haversine";
+import moment from "moment";
+import { formatDuration } from "./timeduration";
+import { useVoteMutation } from "@/app/store/api";
+import { TouchableOpacity } from "react-native-gesture-handler";
+import ReportComponent from "./report";
+import { useAppSelector } from "@/app/store/Store";
+
+type gabprops = {
+  gab: gabtypes;
+};
+
+export const Gab = ({ gab }: gabprops) => {
+
+  let { latitude, longitude } = getLocation();
+  const [upvoteColor, setupvoteColor] = useState("#86898d");
+  const [downvoteColor, setdownvoteColor] = useState("#86898d");
+  const [votetype, setvotetype] = useState("");
+  const [voteasync] = useVoteMutation({});
+  const [isReportVisible, setIsReportVisible] = useState(false);
+  const [distance, setDistance] = useState<string | null>(null);
+
+  const { selectedlatitude, selectedlongitude } = useAppSelector((state: any) => state.selectedlocation);
+
+  useEffect(() => {
+    if (selectedlatitude !== null && selectedlongitude !== null) {
+      const postLocation = { latitude: gab.latitude, longitude: gab.longitude };
+      const userLocation = { latitude: selectedlatitude, longitude: selectedlongitude };
+      const distanceInKm = haversine(userLocation, postLocation, { unit: "km" });
+      setDistance(distanceInKm.toFixed(2));
+    } else {
+      const postLocation = { latitude: gab.latitude, longitude: gab.longitude };
+      const userLocation = { latitude, longitude };
+      const distanceInKm = haversine(userLocation, postLocation, { unit: "km" });
+      setDistance(distanceInKm.toFixed(2));
+    }
+  }, [selectedlatitude, selectedlongitude, gab, latitude, longitude]);
+  const toggleReportModal = () => {
+
+    setIsReportVisible(!isReportVisible);
+  };
+
+  const handleReportSubmit = (reason: string) => {
+    console.log("Report submitted with reason:", reason);
+  };
+
+  useEffect(() => {
+    const loadVoteStatus = async () => {
+      try {
+        const voteStatus = await AsyncStorage.getItem(`vote_${gab.id}`);
+        if (voteStatus === "Upvote") {
+          setupvoteColor("#0BDA51");
+          setdownvoteColor("#86898d");
+          setvotetype("Upvote");
+        } else if (voteStatus === "Downvote") {
+          setupvoteColor("#86898d");
+          setdownvoteColor("#ED2B2A");
+          setvotetype("Downvote");
+        }
+      } catch (error) {
+        console.log(error);
+      }
+    };
+
+    loadVoteStatus();
+  }, []);
+
+ 
+  const timestamp = moment(gab.createdAt);
+  const now = moment();
+  const duration = moment.duration(now.diff(timestamp));
+  const formattedTime = formatDuration(duration);
+
+  const upvote = () => {
+    // Update the color immediately
+    
+    setupvoteColor("#0BDA51");
+    setdownvoteColor("#86898d");
+    setvotetype("Upvote");
+  };
+
+  const downvote = () => {
+    // Update the color immediately
+    
+    setupvoteColor("#86898d");
+    setdownvoteColor("#ED2B2A");
+    setvotetype("Downvote");
+  };
+
+  useEffect(() => {
+    const vote = async () => {
+      await voteasync({ id: gab.id, voteType: votetype });
+      await AsyncStorage.setItem(`vote_${gab.id}`, votetype);
+    };
+
+    vote();
+  }, [votetype]);
+
+  return (
+    <>
+      <TouchableOpacity
+        className="items-end pl-1  pr-5 pt-1 z-10"
+        onPress={toggleReportModal}
+      >
+        <FontAwesome name="ellipsis-v" size={17} color="#86898d" />
+      </TouchableOpacity>
+
+      {isReportVisible && (
+        <ReportComponent
+          id={gab.id}
+          onClose={toggleReportModal}
+          onSubmit={handleReportSubmit}
+        />
+      )}
+
+      <Link
+        href={{
+          pathname: "/gursha/[id]",
+          params: { id: gab.id },
+        }}
+        asChild
+      >
+      
+        <Pressable>
+          <View className="flex-row mt-[-2px]  pb-0 pl-3 bg-white">
+            <View>
+              <View className="flex-row  z-10">
+                <View className="w-[95%]">
+                  <Text className="text-justify tracking-normal text-base font-medium w-full">
+                    {gab.content}
+                  </Text>
+                </View>
+              </View>
+              {gab.image && (
+                <Image
+                  className="p-2 m-3 ml-0 rounded-md h-52 w-full bg-red"
+                  source={gab.image}
+                />
+              )}
+
+              <View className="flex-row mb-1 mt-2">
+                <Text className="text-gray-400">{formattedTime}</Text>
+                <Text className="ml-2 text-gray-400">{distance}km</Text>
+                <Link
+                  href={{
+                    pathname: "/gursha/[id]",
+                    params: { id: gab.id },
+                  }}
+                  asChild
+                >
+                  <Pressable>
+                    <Text className="ml-2 text-gray-400">
+                  
+                      Comments {gab.comment}{" "}
+                    </Text>
+                  </Pressable>
+                </Link>
+              </View>
+            </View>
+          </View>
+        </Pressable>
+      </Link>
+                  
+      <View className="border-gray-100 flex-row justify-between space-x-8 pt-2 pb-1 border-y pr-1 bg-white ">
+        <View className="flex-row items-center  justify-start pl-4">
+          <TouchableOpacity onPress={upvote}>
+            <FontAwesome name="angle-up" size={25} color={upvoteColor} />
+          </TouchableOpacity>
+          <Text className="mx-1">{gab.impression}</Text>
+
+          <TouchableOpacity onPress={downvote}>
+            <FontAwesome name="angle-down" size={25} color={downvoteColor} />
+          </TouchableOpacity>
+        </View>
+
+        <Link
+          href={{
+            pathname: "/gursha/[id]",
+            params: { id: gab.id },
+          }}
+          asChild
+        > 
+
+          <TouchableOpacity className=" flex-row pt-1 items-center">
+            <FontAwesome name="comment" size={16} color="#86898d" />
+            <Text className="ml-1 text-sm">Comments</Text>
+          </TouchableOpacity>
+        </Link>
+
+        <View className="flex-row pt-1 pr-4">
+          <FontAwesome name="send" size={15} color="#86898d" />
+          <Text> Share </Text>
+        </View>
+
+      </View>
+    </>
+  );
+};
